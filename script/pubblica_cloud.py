@@ -43,14 +43,16 @@ def ig(percorso, parametri=None, metodo="GET"):
 
 
 def aspetta(id_contenitore, minuti=10):
+    # controlli radi: l'app ha un limite di richieste all'ora
     fine = time.time() + minuti * 60
     while time.time() < fine:
+        time.sleep(8)
         stato = ig(id_contenitore, {"fields": "status_code,status"})
         if stato.get("status_code") == "FINISHED":
             return
         if stato.get("status_code") in ("ERROR", "EXPIRED"):
             raise RuntimeError(f"Instagram ha rifiutato il file: {stato.get('status')}")
-        time.sleep(10)
+        time.sleep(22)
     raise RuntimeError("Instagram non ha finito di elaborare il file in tempo")
 
 
@@ -60,8 +62,7 @@ def contenitore(uid, post):
     if post["tipo"] == "storie":
         schermate = [ig(f"{uid}/media", {"media_type": "STORIES", "image_url": url(nome)}, metodo="POST")["id"]
                      for nome in post["schermate"]]
-        for s in schermate:
-            aspetta(s)
+        aspetta(schermate[-1])
         return schermate
     if post["tipo"] == "reel":
         c = ig(f"{uid}/media", {"media_type": "REELS", "video_url": url(post["video"]), "cover_url": url(post["copertina"]),
@@ -78,8 +79,7 @@ def contenitore(uid, post):
             if not alt or "alt" not in str(e).lower():
                 raise
             figli.append(ig(f"{uid}/media", parametri, metodo="POST")["id"])
-    for f in figli:
-        aspetta(f)
+    aspetta(figli[-1])                  # le slide si elaborano in ordine: basta controllare l'ultima
     c = ig(f"{uid}/media", {"media_type": "CAROUSEL", "children": ",".join(figli), "caption": post["caption"]},
            metodo="POST")["id"]
     aspetta(c)
@@ -123,7 +123,6 @@ def rinnova_token():
 
 def main():
     adesso = dt.datetime.now(dt.timezone.utc)
-    uid = ig("me", {"fields": "user_id"})["user_id"]
     coda = []
     for file in glob.glob("coda/*/post.json"):
         with open(file, encoding="utf-8") as f:
@@ -131,6 +130,8 @@ def main():
         quando = dt.datetime.fromisoformat(post["quando"])
         if PROVA or quando - adesso <= ANTICIPO:
             coda.append((quando, post, os.path.dirname(file)))
+    # nessuna richiesta a Instagram se non c'è niente in scadenza (il giro gira ogni 10 minuti)
+    uid = ig("me", {"fields": "user_id"})["user_id"] if coda else None
     for quando, post, cartella in sorted(coda, key=lambda x: x[0]):
         codice = post["codice"]
         if PROVA:
