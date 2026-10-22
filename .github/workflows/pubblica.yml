@@ -20,7 +20,8 @@ concurrency:
 jobs:
   pubblica:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # fino a 55 minuti di attesa dell'orario esatto, più il tempo di pubblicazione
+    timeout-minutes: 80
     steps:
       - uses: actions/checkout@v4
       - name: Pubblica i contenuti in scadenza
