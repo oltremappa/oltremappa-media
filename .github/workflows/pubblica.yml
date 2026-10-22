@@ -24,6 +24,9 @@ jobs:
     timeout-minutes: 80
     steps:
       - uses: actions/checkout@v4
+      # serve al rinnovo settimanale del token (cifra il segreto): installarlo dentro lo script non funzionava
+      - name: Installa pynacl
+        run: python -m pip install -q pynacl
       - name: Pubblica i contenuti in scadenza
         env:
           IG_TOKEN: ${{ secrets.IG_TOKEN }}
