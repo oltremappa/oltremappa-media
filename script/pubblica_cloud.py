@@ -55,12 +55,19 @@ def aspetta(id_contenitore, minuti=10):
 
 
 def contenitore(uid, post):
+    """Prepara su Instagram il contenuto e restituisce gli id da pubblicare (le storie ne hanno uno per schermata)."""
     url = lambda nome: f"{RAW}/coda/{urllib.parse.quote(post['codice'])}/{nome}"
+    if post["tipo"] == "storie":
+        schermate = [ig(f"{uid}/media", {"media_type": "STORIES", "image_url": url(nome)}, metodo="POST")["id"]
+                     for nome in post["schermate"]]
+        for s in schermate:
+            aspetta(s)
+        return schermate
     if post["tipo"] == "reel":
         c = ig(f"{uid}/media", {"media_type": "REELS", "video_url": url(post["video"]), "cover_url": url(post["copertina"]),
                                 "caption": post["caption"], "share_to_feed": "true"}, metodo="POST")["id"]
         aspetta(c, minuti=20)
-        return c
+        return [c]
     figli = []
     for nome in post["slide"]:
         parametri = {"image_url": url(nome), "is_carousel_item": "true"}
@@ -76,7 +83,7 @@ def contenitore(uid, post):
     c = ig(f"{uid}/media", {"media_type": "CAROUSEL", "children": ",".join(figli), "caption": post["caption"]},
            metodo="POST")["id"]
     aspetta(c)
-    return c
+    return [c]
 
 
 def salva(cartella, codice, dati):
@@ -138,20 +145,29 @@ def main():
             shutil.rmtree(cartella)
             continue
         try:
-            id_contenitore = contenitore(uid, post)
+            contenitori = contenitore(uid, post)
         except Exception as e:
             print(f"{codice}: errore nella preparazione, riprovo al prossimo giro: {e}")
             continue
         attesa = (quando - dt.datetime.now(dt.timezone.utc)).total_seconds()
         if attesa > 0:
             time.sleep(attesa)
+        # teaser e storia racconto escono solo se il loro post è uscito davvero
+        if post.get("dopo") and not os.path.exists(f"fatti/{post['dopo']}.json"):
+            salva("errori", codice, {"errore": f"il post {post['dopo']} non è uscito: storie non pubblicate",
+                                     "quando": post["quando"]})
+            shutil.rmtree(cartella)
+            continue
         try:
-            id_post = ig(f"{uid}/media_publish", {"creation_id": id_contenitore}, metodo="POST")["id"]
+            pubblicati = []
+            for c in contenitori:
+                pubblicati.append(ig(f"{uid}/media_publish", {"creation_id": c}, metodo="POST")["id"])
+                time.sleep(5)                 # le schermate di una storia escono in ordine
             try:
-                link = ig(id_post, {"fields": "permalink"}).get("permalink")
+                link = ig(pubblicati[0], {"fields": "permalink"}).get("permalink")
             except RuntimeError:
                 link = None
-            salva("fatti", codice, {"id": id_post, "link": link, "quando": post["quando"],
+            salva("fatti", codice, {"id": pubblicati[0], "id_tutti": pubblicati, "link": link, "quando": post["quando"],
                                     "pubblicato": dt.datetime.now(dt.timezone.utc).isoformat()})
             print(f"PUBBLICATO {codice}: {link}")
         except Exception as e:
