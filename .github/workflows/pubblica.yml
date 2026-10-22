@@ -3,7 +3,7 @@ name: Pubblica su Instagram
 
 on:
   schedule:
-    - cron: "4,14,24,34,44,54 * * * *"
+    - cron: "*/5 * * * *"
   workflow_dispatch:
     inputs:
       prova:
