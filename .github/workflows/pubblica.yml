@@ -1,0 +1,37 @@
+# Pubblicazione automatica Oltremappa: gira sui server di GitHub, anche con il PC spento.
+name: Pubblica su Instagram
+
+on:
+  schedule:
+    - cron: "4,14,24,34,44,54 * * * *"
+  workflow_dispatch:
+    inputs:
+      prova:
+        description: "1 = prepara i contenuti in coda senza pubblicarli"
+        default: "0"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pubblica
+  cancel-in-progress: false
+
+jobs:
+  pubblica:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pubblica i contenuti in scadenza
+        env:
+          IG_TOKEN: ${{ secrets.IG_TOKEN }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          PROVA: ${{ github.event.inputs.prova }}
+        run: python script/pubblica_cloud.py
+      - name: Salva l'esito
+        run: |
+          git config user.name "oltremappa-bot"
+          git config user.email "oltremappa@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet || (git commit -m "esito pubblicazione" && git pull --rebase && git push)
