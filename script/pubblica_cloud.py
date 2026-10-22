@@ -1,8 +1,9 @@
 """Gira sui server di GitHub (GitHub Actions), non sul PC: pubblica su Instagram i contenuti in coda all'ora giusta.
 
 La coda la riempie strumenti/pubblica/programma.py a PC acceso: coda/<codice>/post.json + immagini o video.
-A ogni giro (ogni 10 minuti circa) prende i contenuti che scadono nei prossimi 20 minuti, aspetta l'ora esatta e
-li pubblica. L'esito va in fatti/<codice>.json (o errori/<codice>.json) e la cartella in coda viene tolta.
+A ogni giro prende i contenuti che scadono nei prossimi 55 minuti, aspetta l'ora esatta e li pubblica.
+GitHub dovrebbe far partire un giro ogni 5 minuti, ma sul piano gratuito lo fa ogni 35-45 (verificato il 22/10/2026):
+con 20 minuti di anticipo un post poteva cadere tra due giri e uscire fino a 40 minuti dopo l'orario. L'esito va in fatti/<codice>.json (o errori/<codice>.json) e la cartella in coda viene tolta.
 Il token di Instagram sta nel segreto IG_TOKEN e una volta a settimana si rinnova da solo.
 """
 import base64
@@ -21,7 +22,7 @@ import urllib.request
 REPO = os.environ.get("GITHUB_REPOSITORY", "oltremappa/oltremappa-media")
 RAW = f"https://raw.githubusercontent.com/{REPO}/main"
 API_IG = "https://graph.instagram.com"
-ANTICIPO = dt.timedelta(minutes=20)
+ANTICIPO = dt.timedelta(minutes=55)        # più lungo dell'intervallo reale tra due giri (35-45 minuti)
 RITARDO_MASSIMO = dt.timedelta(hours=6)
 PROVA = os.environ.get("PROVA") == "1"
 TOKEN = os.environ["IG_TOKEN"]
@@ -130,7 +131,7 @@ def main():
         quando = dt.datetime.fromisoformat(post["quando"])
         if PROVA or quando - adesso <= ANTICIPO:
             coda.append((quando, post, os.path.dirname(file)))
-    # nessuna richiesta a Instagram se non c'è niente in scadenza (il giro gira ogni 10 minuti)
+    # nessuna richiesta a Instagram se non c'è niente in scadenza
     uid = ig("me", {"fields": "user_id"})["user_id"] if coda else None
     for quando, post, cartella in sorted(coda, key=lambda x: x[0]):
         codice = post["codice"]
