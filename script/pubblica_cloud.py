@@ -105,8 +105,7 @@ def rinnova_token():
     if adesso - ultimo < dt.timedelta(days=7) or not os.environ.get("GH_PAT"):
         return
     nuovo = ig("refresh_access_token", {"grant_type": "ig_refresh_token"})["access_token"]
-    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "pynacl"], check=True)
-    from nacl import encoding, public
+    from nacl import encoding, public          # installato dal workflow (passo «Installa pynacl»)
     intest = {"Authorization": f"Bearer {os.environ['GH_PAT']}", "Accept": "application/vnd.github+json",
               "User-Agent": "oltremappa"}
     with urllib.request.urlopen(urllib.request.Request(
@@ -146,10 +145,19 @@ def main():
             salva("errori", codice, {"errore": "ora passata da più di 6 ore: non pubblicato", "quando": post["quando"]})
             shutil.rmtree(cartella)
             continue
-        try:
-            contenitori = contenitore(uid, post)
-        except Exception as e:
-            print(f"{codice}: errore nella preparazione, riprovo al prossimo giro: {e}")
+        # fino a 3 tentativi a un minuto di distanza: il 22/10/2026 Instagram ha rifiutato per qualche minuto
+        # le immagini del Lesotho appena ricaricate («Only photo or video can be accepted»), poi le ha accettate
+        contenitori = None
+        for tentativo in range(3):
+            try:
+                contenitori = contenitore(uid, post)
+                break
+            except Exception as e:
+                print(f"{codice}: errore nella preparazione (tentativo {tentativo + 1} di 3): {e}")
+                if tentativo < 2:
+                    time.sleep(60)
+        if contenitori is None:
+            print(f"{codice}: riprovo al prossimo giro")
             continue
         attesa = (quando - dt.datetime.now(dt.timezone.utc)).total_seconds()
         if attesa > 0:
