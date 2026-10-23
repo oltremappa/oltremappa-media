@@ -47,13 +47,13 @@ def aspetta(id_contenitore, minuti=10):
     # controlli radi: l'app ha un limite di richieste all'ora
     fine = time.time() + minuti * 60
     while time.time() < fine:
-        time.sleep(8)
+        time.sleep(15)
         stato = ig(id_contenitore, {"fields": "status_code,status"})
         if stato.get("status_code") == "FINISHED":
             return
         if stato.get("status_code") in ("ERROR", "EXPIRED"):
             raise RuntimeError(f"Instagram ha rifiutato il file: {stato.get('status')}")
-        time.sleep(22)
+        time.sleep(45)
     raise RuntimeError("Instagram non ha finito di elaborare il file in tempo")
 
 
@@ -122,8 +122,9 @@ def rinnova_token():
 
 
 def main():
+    """Restituisce i codici non pubblicati: se ce ne sono il giro finisce in errore e GitHub manda la mail."""
     adesso = dt.datetime.now(dt.timezone.utc)
-    coda = []
+    coda, falliti = [], []
     for file in glob.glob("coda/*/post.json"):
         with open(file, encoding="utf-8") as f:
             post = json.load(f)
@@ -143,6 +144,7 @@ def main():
             continue
         if dt.datetime.now(dt.timezone.utc) - quando > RITARDO_MASSIMO:
             salva("errori", codice, {"errore": "ora passata da più di 6 ore: non pubblicato", "quando": post["quando"]})
+            falliti.append(codice)
             shutil.rmtree(cartella)
             continue
         # fino a 3 tentativi a un minuto di distanza: il 22/10/2026 Instagram ha rifiutato per qualche minuto
@@ -155,7 +157,8 @@ def main():
             except Exception as e:
                 print(f"{codice}: errore nella preparazione (tentativo {tentativo + 1} di 3): {e}")
                 if tentativo < 2:
-                    time.sleep(60)
+                    # se Instagram dice «troppe richieste», riprovare subito peggiora: si aspetta di più
+                    time.sleep(300 if "limit" in str(e).lower() else 60)
         if contenitori is None:
             print(f"{codice}: riprovo al prossimo giro")
             continue
@@ -166,6 +169,7 @@ def main():
         if post.get("dopo") and not os.path.exists(f"fatti/{post['dopo']}.json"):
             salva("errori", codice, {"errore": f"il post {post['dopo']} non è uscito: storie non pubblicate",
                                      "quando": post["quando"]})
+            falliti.append(codice)
             shutil.rmtree(cartella)
             continue
         try:
@@ -196,12 +200,16 @@ def main():
             else:
                 salva("errori", codice, {"errore": str(e), "quando": post["quando"]})
                 print(f"{codice}: ERRORE nella pubblicazione: {e}")
+                falliti.append(codice)
         shutil.rmtree(cartella)
     try:
         rinnova_token()
     except Exception as e:
         print(f"Rinnovo del token non riuscito: {e}")
+    return falliti
 
 
 if __name__ == "__main__":
-    main()
+    non_usciti = main()
+    if non_usciti:
+        sys.exit(f"Non pubblicati: {', '.join(non_usciti)} (dettagli in errori/)")
