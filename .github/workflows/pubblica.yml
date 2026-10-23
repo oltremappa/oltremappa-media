@@ -33,9 +33,29 @@ jobs:
           GH_PAT: ${{ secrets.GH_PAT }}
           PROVA: ${{ github.event.inputs.prova }}
         run: python script/pubblica_cloud.py
+      # Se nel frattempo il PC ha cambiato la coda, il vecchio «git pull --rebase» andava in conflitto e l'esito
+      # si perdeva (22/10/2026): un post uscito restava in coda e poteva uscire due volte. Ora l'esito del giro vince.
       - name: Salva l'esito
         run: |
           git config user.name "oltremappa-bot"
           git config user.email "oltremappa@users.noreply.github.com"
           git add -A
-          git diff --cached --quiet || (git commit -m "esito pubblicazione" && git pull --rebase && git push)
+          git diff --cached --quiet && exit 0
+          esiti=$(git diff --cached --name-only --diff-filter=AM -- fatti errori stato)
+          mkdir -p /tmp/esito
+          for f in $esiti; do mkdir -p "/tmp/esito/$(dirname "$f")"; cp "$f" "/tmp/esito/$f"; done
+          git commit -q -m "esito pubblicazione"
+          for tentativo in 1 2 3 4 5; do
+            git push && exit 0
+            sleep 5
+            git fetch -q origin main
+            git reset -q --hard origin/main
+            for f in $esiti; do
+              mkdir -p "$(dirname "$f")"; cp "/tmp/esito/$f" "$f"
+              case "$f" in fatti/*|errori/*) rm -rf "coda/$(basename "$f" .json)";; esac
+            done
+            git add -A
+            git diff --cached --quiet && exit 0
+            git commit -q -m "esito pubblicazione"
+          done
+          exit 1
