@@ -81,8 +81,18 @@ def contenitore(uid, post):
                 raise
             figli.append(ig(f"{uid}/media", parametri, metodo="POST")["id"])
     aspetta(figli[-1])                  # le slide si elaborano in ordine: basta controllare l'ultima
-    c = ig(f"{uid}/media", {"media_type": "CAROUSEL", "children": ",".join(figli), "caption": post["caption"]},
-           metodo="POST")["id"]
+    parametri = {"media_type": "CAROUSEL", "children": ",".join(figli), "caption": post["caption"]}
+    # luogo (prova del 23/10/2026): non è certo che l'API con login di Instagram lo accetti; se no, esce senza
+    if post.get("luogo"):
+        try:
+            c = ig(f"{uid}/media", dict(parametri, location_id=post["luogo"]), metodo="POST")["id"]
+            aspetta(c)
+            post["esito_luogo"] = "messo"
+            return [c]
+        except RuntimeError as e:
+            post["esito_luogo"] = f"non accettato, pubblicato senza: {e}"
+            print(f"{post['codice']}: luogo {post['luogo']} non accettato ({e}), pubblico senza")
+    c = ig(f"{uid}/media", parametri, metodo="POST")["id"]
     aspetta(c)
     return [c]
 
@@ -182,7 +192,8 @@ def main():
             except RuntimeError:
                 link = None
             salva("fatti", codice, {"id": pubblicati[0], "id_tutti": pubblicati, "link": link, "quando": post["quando"],
-                                    "pubblicato": dt.datetime.now(dt.timezone.utc).isoformat()})
+                                    "pubblicato": dt.datetime.now(dt.timezone.utc).isoformat(),
+                                    **({"luogo": post["esito_luogo"]} if post.get("esito_luogo") else {})})
             print(f"PUBBLICATO {codice}: {link}")
         except Exception as e:
             # niente nuovo tentativo: se Instagram l'avesse pubblicato lo stesso, uscirebbe due volte.
