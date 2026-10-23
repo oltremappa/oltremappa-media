@@ -181,9 +181,21 @@ def main():
                                     "pubblicato": dt.datetime.now(dt.timezone.utc).isoformat()})
             print(f"PUBBLICATO {codice}: {link}")
         except Exception as e:
-            # niente nuovo tentativo: se Instagram l'avesse pubblicato lo stesso, uscirebbe due volte
-            salva("errori", codice, {"errore": str(e), "quando": post["quando"]})
-            print(f"{codice}: ERRORE nella pubblicazione: {e}")
+            # niente nuovo tentativo: se Instagram l'avesse pubblicato lo stesso, uscirebbe due volte.
+            # Il 22/10/2026 il Lesotho ha avuto «Application request limit reached» ed è uscito lo stesso:
+            # se il contenitore risulta pubblicato è un esito riuscito (così le sue storie partono).
+            try:
+                uscito = all(ig(c, {"fields": "status_code"}).get("status_code") == "PUBLISHED" for c in contenitori)
+            except RuntimeError:
+                uscito = False
+            if uscito:
+                salva("fatti", codice, {"id": None, "id_tutti": [], "link": None, "quando": post["quando"],
+                                        "pubblicato": dt.datetime.now(dt.timezone.utc).isoformat(),
+                                        "nota": f"pubblicato nonostante l'errore: {e}"})
+                print(f"PUBBLICATO {codice} nonostante l'errore: {e}")
+            else:
+                salva("errori", codice, {"errore": str(e), "quando": post["quando"]})
+                print(f"{codice}: ERRORE nella pubblicazione: {e}")
         shutil.rmtree(cartella)
     try:
         rinnova_token()
