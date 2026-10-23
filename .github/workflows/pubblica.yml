@@ -21,7 +21,7 @@ jobs:
   pubblica:
     runs-on: ubuntu-latest
     # fino a 55 minuti di attesa dell'orario esatto, più il tempo di pubblicazione
-    timeout-minutes: 80
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       # serve al rinnovo settimanale del token (cifra il segreto): installarlo dentro lo script non funzionava
@@ -35,7 +35,9 @@ jobs:
         run: python script/pubblica_cloud.py
       # Se nel frattempo il PC ha cambiato la coda, il vecchio «git pull --rebase» andava in conflitto e l'esito
       # si perdeva (22/10/2026): un post uscito restava in coda e poteva uscire due volte. Ora l'esito del giro vince.
+      # anche se il passo prima è finito in errore: quello che è uscito va registrato comunque
       - name: Salva l'esito
+        if: always()
         run: |
           git config user.name "oltremappa-bot"
           git config user.email "oltremappa@users.noreply.github.com"
