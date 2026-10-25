@@ -23,7 +23,11 @@ jobs:
     # fino a 55 minuti di attesa dell'orario esatto, più il tempo di pubblicazione
     timeout-minutes: 90
     steps:
+      # ref: main = la coda di quando il giro PARTE. Senza, un giro rimasto in attesa usava la coda di quando era
+      # stato creato: il 23/10/2026 alle 16:30 ha ritrovato Socotra appena pubblicato e ha provato a ripubblicarlo
       - uses: actions/checkout@v4
+        with:
+          ref: main
       # serve al rinnovo settimanale del token (cifra il segreto): installarlo dentro lo script non funzionava
       - name: Installa pynacl
         run: python -m pip install -q pynacl
