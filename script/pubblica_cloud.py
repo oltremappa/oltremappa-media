@@ -188,10 +188,16 @@ def main():
             # niente nuovo tentativo: se Instagram l'avesse pubblicato lo stesso, uscirebbe due volte.
             # Il 22/10/2026 il Lesotho ha avuto «Application request limit reached» ed è uscito lo stesso:
             # se il contenitore risulta pubblicato è un esito riuscito (così le sue storie partono).
-            try:
-                uscito = all(ig(c, {"fields": "status_code"}).get("status_code") == "PUBLISHED" for c in contenitori)
-            except RuntimeError:
-                uscito = False
+            # il controllo subito dopo l'errore cadeva anch'esso nel limite di richieste (Socotra 23/10, Baarle 25/10):
+            # così teaser e storie restavano bloccati. Si riprova dopo 2, 5 e 10 minuti, quando il limite si è allentato.
+            uscito = False
+            for pausa in (120, 300, 600):
+                time.sleep(pausa)
+                try:
+                    uscito = all(ig(c, {"fields": "status_code"}).get("status_code") == "PUBLISHED" for c in contenitori)
+                    break
+                except RuntimeError:
+                    continue
             if uscito:
                 salva("fatti", codice, {"id": None, "id_tutti": [], "link": None, "quando": post["quando"],
                                         "pubblicato": dt.datetime.now(dt.timezone.utc).isoformat(),
