@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: pubblica
@@ -20,8 +21,8 @@ concurrency:
 jobs:
   pubblica:
     runs-on: ubuntu-latest
-    # fino a 55 minuti di attesa dell'orario esatto, più il tempo di pubblicazione
-    timeout-minutes: 90
+    # fino a 55 minuti di attesa dell'orario esatto, il tempo di pubblicazione e fino a 250 minuti di «sveglia»
+    timeout-minutes: 355
     steps:
       # ref: main = la coda di quando il giro PARTE. Senza, un giro rimasto in attesa usava la coda di quando era
       # stato creato: il 23/10/2026 alle 16:30 ha ritrovato Socotra appena pubblicato e ha provato a ripubblicarlo
@@ -65,3 +66,28 @@ jobs:
             git commit -q -m "esito pubblicazione"
           done
           exit 1
+      # «Sveglia» (24/11/2026): dal 21/11 GitHub fa partire i giri programmati solo ogni 6-10 ore e il 23/11 R64 è
+      # saltato. Se in coda c'è altro, il giro aspetta fino a 50 minuti prima del prossimo contenuto (al massimo
+      # 250 minuti) e poi fa partire da solo un giro nuovo, che lo pubblica all'ora esatta.
+      - name: Sveglia per il prossimo contenuto
+        if: always() && github.event.inputs.prova != '1'
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          git fetch -q origin main && git reset -q --hard origin/main
+          python - <<'EOF'
+          import datetime as dt, glob, json, subprocess, time
+          ora = dt.datetime.now(dt.timezone.utc)
+          prossimi = []
+          for p in glob.glob("coda/*/post.json"):
+              q = dt.datetime.fromisoformat(json.load(open(p, encoding="utf-8"))["quando"])
+              if q > ora:
+                  prossimi.append(q)
+          if not prossimi:
+              print("Coda vuota: nessuna sveglia.")
+              raise SystemExit(0)
+          attesa = max(0, min((min(prossimi) - ora).total_seconds() - 50 * 60, 250 * 60))
+          print(f"Prossimo contenuto: {min(prossimi):%d/%m %H:%M} UTC. Sveglia tra {attesa / 60:.0f} minuti.")
+          time.sleep(attesa)
+          subprocess.run(["gh", "workflow", "run", "pubblica.yml", "--ref", "main", "-R", "oltremappa/oltremappa-media"], check=True)
+          EOF
